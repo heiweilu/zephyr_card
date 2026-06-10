@@ -1,0 +1,113 @@
+/* water_turret DTS overlay — ESP32-S3 DevKitC on esp32s3_devkitc/esp32s3/procpu
+ *
+ * GPIO 分配:
+ *   GPIO9  → 水平舵机 PWM (LEDC CH0)
+ *   GPIO10 → 垂直舵机 PWM (LEDC CH1)
+ *   GPIO38 → 继电器 (水枪触发)
+ *   GPIO0  → BOOT 按钮 (手动开火)
+ *   GPIO17 → UART1 TX (→ K210 RX, 保留)
+ *   GPIO18 → UART1 RX (← K210 TX)
+ */
+
+#include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/esp32s3-pinctrl.h>
+
+/ {
+	chosen {
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+	};
+
+	/* ── 舵机节点 ── */
+	servo_h: servo_h {
+		compatible = "pwm-servo";
+		pwms = <&ledc0 0 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		min-pulse = <PWM_USEC(500)>;
+		max-pulse = <PWM_USEC(2500)>;
+	};
+
+	servo_v: servo_v {
+		compatible = "pwm-servo";
+		pwms = <&ledc0 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		min-pulse = <PWM_USEC(500)>;
+		max-pulse = <PWM_USEC(2500)>;
+	};
+
+	/* ── 继电器（水枪触发） ── */
+	relays {
+		compatible = "gpio-leds";
+		relay0: relay0 {
+			gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>; /* GPIO38 */
+			label = "Water Gun Relay";
+		};
+	};
+
+	/* ── 按钮 ── */
+	buttons {
+		compatible = "gpio-keys";
+		boot_button: boot_button {
+			gpios = <&gpio0 0 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			label = "BOOT Button";
+		};
+	};
+
+	aliases {
+		sw0 = &boot_button;
+		relay-fire = &relay0;
+		servo-h = &servo_h;
+		servo-v = &servo_v;
+		k210-uart = &uart1;
+	};
+};
+
+/* ── LEDC PWM pinctrl ── */
+&pinctrl {
+	ledc0_default: ledc0_default {
+		group1 {
+			pinmux = <LEDC_CH0_GPIO9>,
+				 <LEDC_CH1_GPIO10>;
+			output-enable;
+		};
+	};
+
+	uart1_default: uart1_default {
+		group1 {
+			pinmux = <UART1_TX_GPIO17>;
+			output-enable;
+		};
+		group2 {
+			pinmux = <UART1_RX_GPIO18>;
+			bias-pull-up;
+		};
+	};
+};
+
+&ledc0 {
+	pinctrl-0 = <&ledc0_default>;
+	pinctrl-names = "default";
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel0@0 {
+		reg = <0x0>;
+		timer = <0>;
+	};
+
+	channel1@1 {
+		reg = <0x1>;
+		timer = <0>;
+	};
+};
+
+&uart1 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart1_default>;
+	pinctrl-names = "default";
+};
+
+&usb_serial {
+	status = "okay";
+};
